@@ -95,6 +95,8 @@ h2 { font: 650 13px/1.2 var(--f-ui); letter-spacing: .06em; text-transform: uppe
 .res { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
 .res a, .res .nolink { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 10px; align-items: center; padding: 10px 12px; border-radius: 10px; background: var(--surface-2); text-decoration: none; color: var(--ink); transition: background .18s; min-height: 48px; }
 .res a:hover { background: var(--raise); }
+.res a.ready { background: var(--stamp-soft); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--stamp) 45%, transparent); }
+.res a.ready:hover { background: var(--raise); }
 .res svg { width: 18px; height: 18px; color: var(--done-text); grid-row: span 2; }
 .res .rt { font-weight: 650; font-size: 14px; overflow-wrap: anywhere; }
 .res .rs { font-size: 12px; color: var(--ink-3); }
@@ -357,12 +359,7 @@ body.view-analysis main > :not(#anaView) { display: none !important; }
         <div class="exam" id="exam"></div>
       </div>
       <div class="tally"><span class="tally-text" id="tallyText">Counting stamps…</span><span class="tally-bar" aria-hidden="true"><i id="tallyBar"></i></span></div>
-      <details class="fold" id="delivH" data-fold="quizzes"><summary class="subh">Exam quizzes <span class="fsum" id="delivSum"></span><svg aria-hidden="true"><use href="#i-chev"/></svg></summary>
-      <div class="deliv" id="deliv"></div></details>
-      <details class="fold" data-fold="resources"><summary class="subh">Resources <span class="fsum" id="resSum"></span><svg aria-hidden="true"><use href="#i-chev"/></svg></summary>
-      <ul class="res" id="resources"></ul></details>
-      <details class="fold" id="cmpH" data-fold="analysis"><summary class="subh">Analysis <span class="fsum">Manhattanki vs. Morsanki</span><svg aria-hidden="true"><use href="#i-chev"/></svg></summary>
-      <ul class="res" id="cmpCardList"><li><a href="#analysis" id="cmpCard" data-view="analysis"><svg aria-hidden="true"><use href="#i-chart"/></svg><span class="rt">Manhattanki vs. Morsanki analysis</span><span class="rs" id="cmpCardSub">See the full card comparison</span></a></li></ul></details>
+      <ul class="res" id="resources" aria-label="Exam links"></ul>
     </section>
 
     <section class="day" aria-labelledby="weekH" style="gap:12px">
@@ -378,6 +375,12 @@ body.view-analysis main > :not(#anaView) { display: none !important; }
     <div id="days" class="day" style="gap:22px">
       <div class="panel lecs"><div class="skel"></div><div class="skel"></div><div class="skel"></div></div>
     </div>
+
+    <!-- Exam quizzes that aren't built yet sit after the lectures; once built they move up to the header as a card. -->
+    <section class="day" id="delivH" aria-labelledby="delivTitle" hidden>
+      <div class="day-head"><h2 id="delivTitle">Exam quizzes</h2><span class="day-sub" id="delivSum"></span></div>
+      <div class="deliv" id="deliv"></div>
+    </section>
 
     <section class="ana" id="anaView" hidden aria-labelledby="anaTitle">
       <a class="back" href="#" data-view="board"><svg aria-hidden="true"><use href="#i-chev"/></svg>Back to the board</a>
@@ -486,7 +489,7 @@ body.view-analysis main > :not(#anaView) { display: none !important; }
 
   // Nick's private Box drop folder (owner-only button; roommates never see it).
   const INBOX = "https://app.box.com/folder/425567843721";
-  const RES_ICON = { box: "i-folder", folder: "i-folder", quiz: "i-quiz", packet: "i-doc", pdf: "i-doc", video: "i-video", deck: "i-cards" };
+  const RES_ICON = { chart: "i-chart", box: "i-folder", folder: "i-folder", quiz: "i-quiz", packet: "i-doc", pdf: "i-doc", video: "i-video", deck: "i-cards" };
   const curTest = () => state.tests.find((t) => t.id === state.test) || null;
   function pickTest() {
     if (state.test && state.tests.some((t) => t.id === state.test)) return;
@@ -520,16 +523,25 @@ body.view-analysis main > :not(#anaView) { display: none !important; }
     ];
     if (t && t.lastOfCourse) DV.push({ k: "brett", label: "Brett's questions quiz", icon: "i-cards", inbox: true, wait: "Builds when Brett's deck and guides are added" });
     const dl = (t && t.deliverables) || {};
-    $("deliv").innerHTML = t ? DV.map((d) => { const v = dl[d.k] || { s: "wait" }; const st = typeof v === "string" ? { s: v } : v;
-      return `<div class="dv${st.s === "done" ? " is-done" : ""}"><span class="st ${esc(st.s)}" style="--tilt:${tiltFor(t.id, d.k)}"><svg aria-hidden="true"><use href="#${d.icon}"/></svg></span><span class="dt">${d.label}</span><span class="ds">${esc(STATE_WORD[st.s] || st.s)}${st.note ? " — " + esc(st.note) : st.s === "wait" ? " — " + d.wait : ""}</span>${(st.url || state.owner) ? `<span class="dact">${st.url ? `<a class="act" href="${esc(st.url)}" target="_blank" rel="noopener"><svg aria-hidden="true"><use href="#i-out"/></svg>Open</a>` : ""}${state.owner ? (d.inbox ? `<a class="act" href="${INBOX}" target="_blank" rel="noopener"><svg aria-hidden="true"><use href="#i-folder"/></svg>Add files</a>` : `<button class="act" type="button" data-tact="${d.act}"><svg aria-hidden="true"><use href="#i-play"/></svg>${st.s === "done" ? "Rebuild" : "Build now"}</button>`) : ""}</span>` : ""}</div>`; }).join("") : "";
-    $("delivH").hidden = !t;
-    if (t) { const nd = DV.filter((d) => { const v = dl[d.k]; return (typeof v === "string" ? v : v && v.s) === "done"; }).length; $("delivSum").innerHTML = `<b class="num">${nd}</b> of <span class="num">${DV.length}</span> ready`; }
+    const stOf = (d) => { const v = dl[d.k] || { s: "wait" }; return typeof v === "string" ? { s: v } : v; };
+    const ready = t ? DV.filter((d) => stOf(d).s === "done") : [];
+    const pending = t ? DV.filter((d) => stOf(d).s !== "done") : [];
+    // Not built yet → listed after the lectures (owner gets Build now / Add files there).
+    $("deliv").innerHTML = pending.map((d) => { const st = stOf(d);
+      return `<div class="dv"><span class="st ${esc(st.s)}" style="--tilt:${tiltFor(t.id, d.k)}"><svg aria-hidden="true"><use href="#${d.icon}"/></svg></span><span class="dt">${d.label}</span><span class="ds">${esc(STATE_WORD[st.s] || st.s)}${st.note ? " — " + esc(st.note) : st.s === "wait" ? " — " + d.wait : ""}</span>${state.owner ? `<span class="dact">${d.inbox ? `<a class="act" href="${INBOX}" target="_blank" rel="noopener"><svg aria-hidden="true"><use href="#i-folder"/></svg>Add files</a>` : `<button class="act" type="button" data-tact="${d.act}"><svg aria-hidden="true"><use href="#i-play"/></svg>Build now</button>`}</span>` : ""}</div>`; }).join("");
+    $("delivH").hidden = !pending.length;
+    $("delivSum").textContent = pending.length ? `${ready.length} of ${DV.length} ready` : "";
+    // Header cards: the test's Box folder, the analysis, then each exam quiz once it's built.
     const res = [];
-    if (t && t.box && t.box.url) res.push({ title: `${t.id} practice questions`, sub: "Box folder · per-lecture quizzes and question PDFs", url: t.box.url, kind: "box" });
+    if (t && t.box && t.box.url) res.push({ title: `${t.id} practice questions`, sub: "Box folder · every quiz and question PDF", url: t.box.url, kind: "box" });
+    if (db) res.push({ title: "Manhattanki vs. Morsanki analysis", sub: "See the full card comparison", url: "#analysis", kind: "chart", view: "analysis" });
+    for (const d of ready) { const st = stOf(d); res.push({ title: d.label, sub: "Ready" + (st.note ? " · " + st.note : ""), url: st.url, icon: d.icon, ready: true }); }
     const seen = new Set(res.map((r) => r.url));
     for (const r of (t && t.resources) || []) { if (r.url && seen.has(r.url)) continue; seen.add(r.url); res.push({ title: r.title, sub: r.note || r.kindLabel || "", url: r.url, kind: r.kind }); }
-    $("resSum").textContent = res.length ? `${res.length} ${res.length === 1 ? "link" : "links"}` : "None yet";
-    $("resources").innerHTML = res.map((r) => { const inner = `<svg aria-hidden="true"><use href="#${RES_ICON[r.kind] || "i-doc"}"/></svg><span class="rt">${esc(r.title)}</span><span class="rs">${esc(r.sub)}</span>`; return `<li>${r.url ? `<a href="${esc(r.url)}" target="_blank" rel="noopener">${inner}</a>` : `<span class="nolink">${inner}</span>`}</li>`; }).join("") || (t ? `<li class="muted">Resources for this exam show up here as they're posted (Box folder, practice packets, quizzes).</li>` : "");
+    $("resources").innerHTML = res.map((r) => { const inner = `<svg aria-hidden="true"><use href="#${r.icon || RES_ICON[r.kind] || "i-doc"}"/></svg><span class="rt">${esc(r.title)}</span><span class="rs">${esc(r.sub)}</span>`;
+      if (r.view) return `<li><a href="${esc(r.url)}" data-view="${esc(r.view)}">${inner}</a></li>`;
+      return `<li>${r.url ? `<a${r.ready ? ' class="ready"' : ""} href="${esc(r.url)}" target="_blank" rel="noopener">${inner}</a>` : `<span class="nolink">${inner}</span>`}</li>`; }).join("");
+    $("resources").hidden = !res.length;
   }
 
   function stampHTML(l, st, animate) {
@@ -630,7 +642,6 @@ body.view-analysis main > :not(#anaView) { display: none !important; }
     const want = courseOf((t && t.id) || (state.meta && state.meta.currentTest));
     let course = want, inCourse = runs.filter((r) => r.course === want);
     if (!inCourse.length && runs.length) { course = runs[0].course; inCourse = runs.filter((r) => r.course === course); }
-    $("cmpH").hidden = !db; $("cmpCardList").hidden = !db;
     const cName = (k) => "Course " + k.replace(/^C/, "");
     if (!inCourse.length) { $("cmpSub").textContent = "The first daily comparison shows up here after Claude's morning run, once a lecture in this course has cards built."; $("cmpRuns").innerHTML = ""; $("cmpDetail").hidden = true; return; }
     $("cmpDetail").hidden = false;
