@@ -71,7 +71,12 @@ a { color: var(--done-text); text-underline-offset: 3px; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 .wrap { max-width: 1180px; margin: 0 auto; padding-inline: var(--gut); padding-block: 18px 48px; display: grid; gap: 22px; }
-@media (min-width: 960px) { .wrap { grid-template-columns: minmax(0, 1fr) 340px; align-items: start; } .side { position: sticky; top: 84px; } }
+@media (min-width: 960px) {
+  .wrap { grid-template-columns: minmax(0, 1fr) 340px; align-items: start; }
+  /* The sidebar is sticky, so it must scroll on its own once it is taller than the window
+     (Nick, 2026-10-12: the Doctoring panel was cut off and couldn't be scrolled to). */
+  .side { position: sticky; top: 84px; max-height: calc(100vh - 96px); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; padding-bottom: 8px; }
+}
 main, .side { min-width: 0; display: grid; gap: 22px; align-content: start; }
 
 h2 { font: 650 13px/1.2 var(--f-ui); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); margin: 0; }
@@ -411,6 +416,10 @@ body.view-analysis main > :not(#anaView) { display: none !important; }
       <h2>Claude jobs</h2>
       <div class="panel jobs" id="jobs"><p class="muted" style="padding:10px 0">No jobs yet. Start one from a lecture.</p></div>
     </section>
+    <section class="day" id="docSec" hidden>
+      <h2>Doctoring prework</h2>
+      <div class="panel jobs" id="doc"></div>
+    </section>
     <section class="day" hidden>
       <h2>Notes from the last refresh</h2>
       <div class="panel notice" id="notes"><p class="muted">Nothing flagged.</p></div>
@@ -625,6 +634,15 @@ body.view-analysis main > :not(#anaView) { display: none !important; }
     $("jobs").innerHTML = jobs.length ? jobs.map((j) => `<div class="job"><span class="dot ${esc(j.status)}"></span><div><div class="job-t">${esc(j.label || j.action)} · ${esc(j.lecture || "")}</div><div class="job-s">${esc(word[j.status] || j.status)} · ${esc(ago(j.updatedAt || j.requestedAt))}${j.status === "queued" || j.status === "started" ? " — runs at " + esc(nextCheck()) : j.note ? " — " + esc(j.note) : ""}</div></div></div>`).join("") : `<p class="muted" style="padding:10px 0">${state.owner ? "No jobs yet. Open a lecture and pick an action." : "No jobs yet."}</p>`;
   }
 
+  // Doctoring prework (separate course, added 2026-10-12): one doc per week, doctoring/<YYYY-MM-DD of the session>,
+  // {week, title, date, s, note, url}. The board worker builds each week's summary + 5 predictions + quiz HTML.
+  function renderDoctoring() {
+    const ws = (state.doctoring || []).slice().sort((a, b) => (b.date || "").localeCompare(a.date || "")).slice(0, 6);
+    $("docSec").hidden = !ws.length;
+    $("doc").innerHTML = ws.map((w) => { const s = w.s || "wait"; const when = w.date ? fmtDay(w.date) : null;
+      return `<div class="job"><span class="st ${esc(s)}" style="width:26px;height:26px;--tilt:${tiltFor(w.id, "doc")}"><svg aria-hidden="true" style="width:13px;height:13px"><use href="#i-doc"/></svg></span><div><div class="job-t">${w.week != null ? `Week ${esc(w.week)} · ` : ""}${esc(w.title || "Prework")}</div><div class="job-s">${when ? esc(when.sub) + " · " : ""}${esc(STATE_WORD[s] || s)}${w.note && w.note !== STATE_WORD[s] ? " — " + esc(w.note) : ""}</div>${w.url ? `<a class="boxlink" style="margin-top:6px;min-height:34px;font-size:13px" href="${esc(w.url)}" target="_blank" rel="noopener"><svg aria-hidden="true"><use href="#i-quiz"/></svg>Summary + quiz</a>` : ""}</div></div>`; }).join("");
+  }
+
   // Manhattanki vs Morsanki analysis: one doc per test (compare/<TEST>), overwritten by each daily run.
   // The analysis page lists every test in the selected test's course, newest run first.
   const courseOf = (id) => ((String(id || "").match(/^C\d+/) || [""])[0]);
@@ -723,7 +741,7 @@ body.view-analysis main > :not(#anaView) { display: none !important; }
   addEventListener("popstate", () => setView(location.hash === "#analysis" ? "analysis" : "board", false));
   addEventListener("hashchange", () => setView(location.hash === "#analysis" ? "analysis" : "board", false));
 
-  function renderAll() { pickTest(); renderHeader(); renderTabs(); renderTestHead(); renderLectures(); renderJobs(); renderCompare(); }
+  function renderAll() { pickTest(); renderHeader(); renderTabs(); renderTestHead(); renderLectures(); renderJobs(); renderDoctoring(); renderCompare(); }
 
   // ---- prompts for actions ----
   function testPrompt(action, t) {
@@ -849,6 +867,7 @@ body.view-analysis main > :not(#anaView) { display: none !important; }
         return { ...l, stages: st };
       });
       state.compare = b.compare || {};
+      state.doctoring = b.doctoring || [];
       state.jobs = [];
       renderAll(); state.firstPaint = false;
     } catch (e) { $("freshText").textContent = "Couldn't load the board"; }
